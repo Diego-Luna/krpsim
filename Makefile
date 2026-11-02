@@ -1,15 +1,17 @@
-NAME = krpsim
+NAME   = krpsim
+VERIF  = krpsim_verif
 SRC_DIR = src
-SRCS = $(wildcard $(SRC_DIR)/*.go)
+SRCS   = $(shell find $(SRC_DIR) -name '*.go' ! -name '*_test.go')
 
-# * build
-
-all: $(NAME)
+all: $(NAME) $(VERIF)
 
 $(NAME): $(SRCS)
-	@go build -o $(NAME) $(SRCS)
+	@go build -o $(NAME) ./$(SRC_DIR)/krpsim
 
-build: $(NAME)
+$(VERIF): $(SRCS)
+	@go build -o $(VERIF) ./$(SRC_DIR)/krpsim_verif
+
+build: all
 
 run: $(NAME)
 	./$(NAME) $(ARGS)
@@ -30,7 +32,7 @@ clean:
 	@rm -f *.test *.out profile.cov
 
 fclean: clean
-	@rm -f $(NAME)
+	@rm -f $(NAME) $(VERIF)
 
 re: fclean all
 
