@@ -1,0 +1,20 @@
+#
+# infinite cyclic production chain - bioregenerative microalgae facility
+#
+# stock                          name:quantity
+algae_culture:6
+nutrient_broth:6
+purified_water:6
+#
+# process                        name:(need1:qty1;need2:qty2;...):(result1:qty1;result2:qty2;...):delay
+#
+cultivate_microalgae:(algae_culture:2;nutrient_broth:2;purified_water:2):(raw_biomass:4;oxygen:2):12
+fractionate_biomass:(raw_biomass:4):(crude_lipids:2;spent_biomass:4):16
+transesterify_lipids:(crude_lipids:2):(biodiesel:1;glycerol_coproduct:2):20
+anaerobic_fermentation:(spent_biomass:4;glycerol_coproduct:2):(digest_effluent:4;methane_biogas:2):24
+biorecycle_effluent:(digest_effluent:4;methane_biogas:2):(algae_culture:2;nutrient_broth:2;purified_water:2):18
+#
+# optimize:(<target_stock>)
+#
+optimize:(biodiesel)
+#

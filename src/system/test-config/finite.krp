@@ -1,0 +1,22 @@
+#
+# finite production chain - satellite avionics assembly
+#
+# stock                          name:quantity
+silicon_wafer:6
+carbon_chassis_blank:4
+power_cell:2
+precision_assembler:1
+#
+# process                        name:(need1:qty1;need2:qty2;...):(result1:qty1;result2:qty2;...):delay
+#
+fabricate_payload_sensor:(silicon_wafer:2;precision_assembler:1):(payload_sensor:1;precision_assembler:1):15
+mill_avionics_frame:(carbon_chassis_blank:2;precision_assembler:1):(avionics_frame:1;precision_assembler:1):20
+calibrate_power_module:(power_cell:1;precision_assembler:1):(power_module:1;precision_assembler:1):10
+integrate_avionics_bus:(payload_sensor:1;avionics_frame:1;precision_assembler:1):(avionics_bus:1;precision_assembler:1):25
+assemble_orbital_satellite:(avionics_bus:1;power_module:1;precision_assembler:1):(orbital_satellite:1;precision_assembler:1):30
+stamp_novelty_badge:(silicon_wafer:1;carbon_chassis_blank:1;precision_assembler:1):(commemorative_badge:10;precision_assembler:1):3
+#
+# optimize:(time;<target_stock>)
+#
+optimize:(time;orbital_satellite)
+#
