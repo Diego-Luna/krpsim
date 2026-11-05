@@ -32,7 +32,6 @@ go.work.sum
 # .idea/
 # .vscode/
 
-krpsim
-krpsim_verif
+/krpsim
 
 .DS_Store
