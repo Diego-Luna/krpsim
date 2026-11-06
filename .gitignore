@@ -33,5 +33,6 @@ go.work.sum
 # .vscode/
 
 /krpsim
+/krpsim_verif
 
 .DS_Store

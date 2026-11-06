@@ -23,7 +23,7 @@ type SimResult struct {
 	Exhausted bool
 }
 
-//  returns a boolean slice indicating which stocks are targets
+// returns a boolean slice indicating which stocks are targets
 func buildTargetSet(cfg *models.Config) []bool {
 	isTarget := make([]bool, len(cfg.StockNames))
 	for _, t := range cfg.Targets {
