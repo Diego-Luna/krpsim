@@ -170,7 +170,7 @@ func TestGreedy_Pomme(t *testing.T) {
 }
 
 func TestGreedy_ContextCancel(t *testing.T) {
-	cfg := loadConfig(t, "../config/infinite.krp", "src/system/config/infinite.krp")
+	cfg := loadConfig(t, "../test-config/infinite.krp", "../config/infinite.krp", "src/system/test-config/infinite.krp", "src/system/config/infinite.krp")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
@@ -179,7 +179,7 @@ func TestGreedy_ContextCancel(t *testing.T) {
 }
 
 func TestGreedy_PriorityUnit(t *testing.T) {
-	cfg := loadConfig(t, "../config/finite.krp", "src/system/config/finite.krp")
+	cfg := loadConfig(t, "../test-config/finite.krp", "../config/finite.krp", "src/system/test-config/finite.krp", "src/system/config/finite.krp")
 	prio := ComputePriority(cfg)
 
 	badgeIdx, ok := cfg.ProcIndex["stamp_novelty_badge"]
