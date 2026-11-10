@@ -35,4 +35,6 @@ go.work.sum
 /krpsim
 /krpsim_verif
 
+/golden
+
 .DS_Store
