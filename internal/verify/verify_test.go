@@ -1,16 +1,16 @@
-package main
+package verify
 
 import (
 	"strings"
 	"testing"
 
-	"krpsim/src/system/parsing"
+	"krpsim/internal/config"
 )
 
 func loadTestConfig(t *testing.T, paths ...string) string {
 	t.Helper()
 	for _, p := range paths {
-		if _, err := parsing.ParseFile(p); err == nil {
+		if _, err := config.ParseFile(p); err == nil {
 			return p
 		}
 	}
@@ -20,7 +20,7 @@ func loadTestConfig(t *testing.T, paths ...string) string {
 
 func TestVerifyTrace_SimpleValidAndBanners(t *testing.T) {
 	path := loadTestConfig(t, "../../resources/simple", "resources/simple")
-	cfg, err := parsing.ParseFile(path)
+	cfg, err := config.ParseFile(path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
@@ -39,7 +39,7 @@ Stock :
  produit => 0
  client => 1
 `
-	res, err := verifyTrace(cfg, strings.NewReader(trace))
+	res, err := Replay(cfg, strings.NewReader(trace))
 	if err != nil {
 		t.Fatalf("verifyTrace returned unexpected I/O error: %v", err)
 	}
@@ -59,14 +59,14 @@ Stock :
 
 func TestVerifyTrace_InsufficientStock(t *testing.T) {
 	path := loadTestConfig(t, "../../resources/simple", "resources/simple")
-	cfg, err := parsing.ParseFile(path)
+	cfg, err := config.ParseFile(path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
 
 	// achat_materiel takes 10 cycles, so at cycle 5 materiel is still 0
 	trace := "0:achat_materiel\n5:realisation_produit\n"
-	res, err := verifyTrace(cfg, strings.NewReader(trace))
+	res, err := Replay(cfg, strings.NewReader(trace))
 	if err != nil {
 		t.Fatalf("verifyTrace returned unexpected I/O error: %v", err)
 	}
@@ -80,13 +80,13 @@ func TestVerifyTrace_InsufficientStock(t *testing.T) {
 
 func TestVerifyTrace_OutOfOrderCycle(t *testing.T) {
 	path := loadTestConfig(t, "../../resources/simple", "resources/simple")
-	cfg, err := parsing.ParseFile(path)
+	cfg, err := config.ParseFile(path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
 
 	trace := "10:achat_materiel\n5:achat_materiel\n"
-	res, err := verifyTrace(cfg, strings.NewReader(trace))
+	res, err := Replay(cfg, strings.NewReader(trace))
 	if err != nil {
 		t.Fatalf("verifyTrace returned unexpected I/O error: %v", err)
 	}
@@ -100,13 +100,13 @@ func TestVerifyTrace_OutOfOrderCycle(t *testing.T) {
 
 func TestVerifyTrace_UnknownProcess(t *testing.T) {
 	path := loadTestConfig(t, "../../resources/simple", "resources/simple")
-	cfg, err := parsing.ParseFile(path)
+	cfg, err := config.ParseFile(path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
 
 	trace := "0:non_existent_proc\n"
-	res, err := verifyTrace(cfg, strings.NewReader(trace))
+	res, err := Replay(cfg, strings.NewReader(trace))
 	if err != nil {
 		t.Fatalf("verifyTrace returned unexpected I/O error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestVerifyTrace_UnknownProcess(t *testing.T) {
 
 func TestVerifyTrace_MalformedLines(t *testing.T) {
 	path := loadTestConfig(t, "../../resources/simple", "resources/simple")
-	cfg, err := parsing.ParseFile(path)
+	cfg, err := config.ParseFile(path)
 	if err != nil {
 		t.Fatalf("ParseFile failed: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestVerifyTrace_MalformedLines(t *testing.T) {
 		"random_garbage_without_colon\n",
 	}
 	for _, tc := range cases {
-		res, err := verifyTrace(cfg, strings.NewReader(tc))
+		res, err := Replay(cfg, strings.NewReader(tc))
 		if err != nil {
 			t.Fatalf("unexpected I/O error for %q: %v", tc, err)
 		}
@@ -149,14 +149,14 @@ step1:(seed:1):(mid:1):0
 step2:(mid:1):(goal:1):5
 optimize:(goal)
 `
-	cfg, err := parsing.Parse(strings.NewReader(cfgText))
+	cfg, err := config.Parse(strings.NewReader(cfgText))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
 	}
 
 	// step1 has delay 0, so mid:1 is immediately available at cycle 0 for step2
 	trace := "0:step1\n0:step2\n"
-	res, err := verifyTrace(cfg, strings.NewReader(trace))
+	res, err := Replay(cfg, strings.NewReader(trace))
 	if err != nil {
 		t.Fatalf("verifyTrace error: %v", err)
 	}
@@ -168,27 +168,5 @@ optimize:(goal)
 	}
 	if got := res.Stocks[cfg.StockIndex["goal"]]; got != 1 {
 		t.Errorf("expected goal=1, got %d", got)
-	}
-}
-
-func TestPrintVerifOutput(t *testing.T) {
-	path := loadTestConfig(t, "../../resources/simple", "resources/simple")
-	cfg, err := parsing.ParseFile(path)
-	if err != nil {
-		t.Fatalf("ParseFile failed: %v", err)
-	}
-
-	var buf strings.Builder
-	printVerifOutput(&buf, cfg, VerifyResult{
-		OK:        false,
-		ErrCycle:  5,
-		ErrProc:   "realisation_produit",
-		ErrReason: "insufficient stock",
-		LastCycle: 5,
-		Stocks:    []int{2, 0, 0, 0},
-	})
-	out := buf.String()
-	if !strings.Contains(out, "Trace error at cycle 5") || !strings.Contains(out, "Last cycle: 5") || !strings.Contains(out, "euro => 2") {
-		t.Errorf("unexpected printVerifOutput output:\n%s", out)
 	}
 }

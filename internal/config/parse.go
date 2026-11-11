@@ -1,4 +1,4 @@
-package parsing
+package config
 
 import (
 	"bufio"
@@ -7,12 +7,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"krpsim/src/system/models"
 )
 
 // * i read a configuration file from the given path and returns a parsed Config
-func ParseFile(path string) (*models.Config, error) {
+func ParseFile(path string) (*Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open file %q: %w", path, err)
@@ -22,9 +20,9 @@ func ParseFile(path string) (*models.Config, error) {
 	return Parse(f)
 }
 
-// *  is time to read krpsim configuration from an io.Reader and returns a populated models.Config
-func Parse(r io.Reader) (*models.Config, error) {
-	cfg := &models.Config{
+// *  is time to read krpsim configuration from an io.Reader and returns a populated Config
+func Parse(r io.Reader) (*Config, error) {
+	cfg := &Config{
 		StockIndex: make(map[string]int),
 		ProcIndex:  make(map[string]int),
 	}
@@ -56,7 +54,7 @@ func Parse(r io.Reader) (*models.Config, error) {
 }
 
 // i classifi and dispatches a single non-empty line
-func parseLine(line string, lineNum int, cfg *models.Config, declaredStocks map[string]bool, hasOptimize *bool) error {
+func parseLine(line string, lineNum int, cfg *Config, declaredStocks map[string]bool, hasOptimize *bool) error {
 	parts, splitErr := splitColonDepth0(line)
 	if splitErr != nil {
 		return fmt.Errorf("line %d: %w", lineNum, splitErr)
@@ -91,7 +89,7 @@ func parseLine(line string, lineNum int, cfg *models.Config, declaredStocks map[
 }
 
 // parses stock an initial stock declaration like "<name>:<qty>"
-func parseStock(name, qtyStr string, lineNum int, cfg *models.Config, declaredStocks map[string]bool) error {
+func parseStock(name, qtyStr string, lineNum int, cfg *Config, declaredStocks map[string]bool) error {
 	if name == "" {
 		return fmt.Errorf("line %d: stock name cannot be empty", lineNum)
 	}
@@ -109,7 +107,7 @@ func parseStock(name, qtyStr string, lineNum int, cfg *models.Config, declaredSt
 }
 
 // ! parseOptimize parses the optimize line targets like "(time;stock1;stock2)"
-func parseOptimize(targetStr string, lineNum int, cfg *models.Config) error {
+func parseOptimize(targetStr string, lineNum int, cfg *Config) error {
 	if !strings.HasPrefix(targetStr, "(") || !strings.HasSuffix(targetStr, ")") {
 		return fmt.Errorf("line %d: invalid optimize directive format, expected optimize:(...)", lineNum)
 	}
@@ -144,7 +142,7 @@ func parseOptimize(targetStr string, lineNum int, cfg *models.Config) error {
 
 // i returns the ID for the given stock name,
 // auto-registering it with initialQty if it does not already exist
-func getOrRegisterStock(cfg *models.Config, name string, initialQty int) int {
+func getOrRegisterStock(cfg *Config, name string, initialQty int) int {
 	if id, exists := cfg.StockIndex[name]; exists {
 		return id
 	}

@@ -1,9 +1,9 @@
-package engine
+package sim
 
 import (
 	"errors"
 	"fmt"
-	"krpsim/src/system/models"
+	"krpsim/internal/config"
 )
 
 // * is returned by `MaxRuns“ when a process has no needs
@@ -11,14 +11,14 @@ const DefaultMaxRunsCap = 10000
 
 // * State represents the simulation state at a specific cycle
 type State struct {
-	Cfg    *models.Config
+	Cfg    *config.Config
 	Cycle  int
 	Stocks []int
 	events eventHeap
 }
 
 // ! NewState initializes a simulation state from a configuration, cloning initial stocks
-func NewState(cfg *models.Config) *State {
+func NewState(cfg *config.Config) *State {
 	if cfg == nil {
 		return nil
 	}

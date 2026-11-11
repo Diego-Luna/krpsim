@@ -2,7 +2,7 @@
   set -e
   mode=$1
   mkdir -p .golden
-  for f in resources/* configs/*.krp src/system/test-config/*.krp; do
+  for f in resources/* configs/*.krp configs/*.krp; do
       [ -f "$f" ] || continue
       out=.golden/$(basename "$f").out
       if [ "$mode" = record ]; then

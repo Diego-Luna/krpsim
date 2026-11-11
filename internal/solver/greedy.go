@@ -1,30 +1,23 @@
-package cmd
+package solver
 
 import (
 	"context"
 
-	"krpsim/src/system/engine"
-	"krpsim/src/system/models"
+	"krpsim/internal/config"
+	"krpsim/internal/sim"
+	"krpsim/internal/trace"
 )
-
-// ? maybe change the place for the models
-
-// * TraceStep records a single process launch at a specific cycle
-type TraceStep struct {
-	Cycle int
-	Proc  string
-}
 
 // * SimResult encapsulates the output of a greedy simulation
 type SimResult struct {
-	Steps     []TraceStep
+	Steps     []trace.Step
 	LastCycle int
 	Stocks    []int
 	Exhausted bool
 }
 
 // returns a boolean slice indicating which stocks are targets
-func buildTargetSet(cfg *models.Config) []bool {
+func buildTargetSet(cfg *config.Config) []bool {
 	isTarget := make([]bool, len(cfg.StockNames))
 	for _, t := range cfg.Targets {
 		if t >= 0 && t < len(isTarget) {
@@ -35,7 +28,7 @@ func buildTargetSet(cfg *models.Config) []bool {
 }
 
 // attempts to greedily launch runnable processes at current state cycle up to 1000 times
-func tryLaunchCycle(cfg *models.Config, prio PriorityResult, state *engine.State, inFlight, demand []int, isTarget, isCat, isRootCat []bool, catReserve int, steps *[]TraceStep) {
+func tryLaunchCycle(cfg *config.Config, prio PriorityResult, state *sim.State, inFlight, demand []int, isTarget, isCat, isRootCat []bool, catReserve int, steps *[]trace.Step) {
 	for launchCount := 0; launchCount < 1000; launchCount++ {
 		launched := false
 		state.InFlightStocks(inFlight)
@@ -52,7 +45,7 @@ func tryLaunchCycle(cfg *models.Config, prio PriorityResult, state *engine.State
 			if err := state.Launch(p); err != nil {
 				continue
 			}
-			*steps = append(*steps, TraceStep{Cycle: state.Cycle, Proc: cfg.Processes[p].Name})
+			*steps = append(*steps, trace.Step{Cycle: state.Cycle, Proc: cfg.Processes[p].Name})
 			launched = true
 			break
 		}
@@ -63,20 +56,20 @@ func tryLaunchCycle(cfg *models.Config, prio PriorityResult, state *engine.State
 }
 
 // executes the greedy krpsim solver respecting backward priorities and stock reservations
-func RunGreedy(ctx context.Context, cfg *models.Config, maxCycle int) SimResult {
+func RunGreedy(ctx context.Context, cfg *config.Config, maxCycle int) SimResult {
 	if cfg == nil {
 		return SimResult{Exhausted: true}
 	}
 	if maxCycle <= 0 {
 		maxCycle = 10000
 	}
-	state := engine.NewState(cfg)
+	state := sim.NewState(cfg)
 	prio := ComputePriority(cfg)
 	isTarget := buildTargetSet(cfg)
 	demand := computeStockDemand(cfg, prio.Useful, prio.Deltas)
 	isCat, isRootCat, catReserve := computeCatalystThreshold(cfg, prio.Deltas)
 	inFlight := make([]int, len(cfg.StockNames))
-	var steps []TraceStep
+	var steps []trace.Step
 	exhausted := false
 
 	for {

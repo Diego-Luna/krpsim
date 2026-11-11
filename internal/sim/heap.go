@@ -1,4 +1,4 @@
-package engine
+package sim
 
 // ? maybe change the type to the fodlers model
 // Event represents a process completion event scheduled at a given cycle

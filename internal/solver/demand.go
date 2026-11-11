@@ -1,12 +1,12 @@
-package cmd
+package solver
 
 import (
-	"krpsim/src/system/models"
+	"krpsim/internal/config"
 )
 
 // is process p is a slow non-catalyst producer
 // of an output that another faster catalyst-based process also produces
-func hasFastCatalystProducer(p int, cfg *models.Config, deltas []ProcessDeltas) bool {
+func hasFastCatalystProducer(p int, cfg *config.Config, deltas []ProcessDeltas) bool {
 	d := &deltas[p]
 	for s, needQty := range d.Needs {
 		if needQty > 0 && d.Net[s] == 0 {
@@ -32,7 +32,7 @@ func hasFastCatalystProducer(p int, cfg *models.Config, deltas []ProcessDeltas) 
 }
 
 // ! calculates maximum quantity needed per stock by any useful process
-func computeStockDemand(cfg *models.Config, useful []bool, deltas []ProcessDeltas) []int {
+func computeStockDemand(cfg *config.Config, useful []bool, deltas []ProcessDeltas) []int {
 	demand := make([]int, len(cfg.StockNames))
 	for p, isU := range useful {
 		if !isU || hasFastCatalystProducer(p, cfg, deltas) {
@@ -49,7 +49,7 @@ func computeStockDemand(cfg *models.Config, useful []bool, deltas []ProcessDelta
 
 // ! calculates how much generator output should be stockpiled
 // ! before a process consumes a root catalyst
-func computeCatalystThreshold(cfg *models.Config, deltas []ProcessDeltas) ([]bool, []bool, int) {
+func computeCatalystThreshold(cfg *config.Config, deltas []ProcessDeltas) ([]bool, []bool, int) {
 	numStocks := len(cfg.StockNames)
 	isCat, isRootCat := make([]bool, numStocks), make([]bool, numStocks)
 	maxBatch := 0
@@ -70,7 +70,7 @@ func computeCatalystThreshold(cfg *models.Config, deltas []ProcessDeltas) ([]boo
 }
 
 // * reports whether a non-root catalyst is still needed by an active converter
-func isCatStillNeeded(s, needQty int, cfg *models.Config, deltas []ProcessDeltas, stocks, inFlight []int) bool {
+func isCatStillNeeded(s, needQty int, cfg *config.Config, deltas []ProcessDeltas, stocks, inFlight []int) bool {
 	for pUse := range cfg.Processes {
 		if deltas[pUse].Needs[s] >= needQty && deltas[pUse].Net[s] == 0 {
 			canStillUse := true
@@ -88,7 +88,7 @@ func isCatStillNeeded(s, needQty int, cfg *models.Config, deltas []ProcessDeltas
 }
 
 // * reports whether consuming root catalyst s would starve raw generator output
-func isRootCatPremature(s, needQty int, cfg *models.Config, deltas []ProcessDeltas, stocks, inFlight []int, catReserve int) bool {
+func isRootCatPremature(s, needQty int, cfg *config.Config, deltas []ProcessDeltas, stocks, inFlight []int, catReserve int) bool {
 	if stocks[s] > needQty {
 		return false
 	}
@@ -105,7 +105,7 @@ func isRootCatPremature(s, needQty int, cfg *models.Config, deltas []ProcessDelt
 }
 
 // ! prevents consuming a root catalyst before enough raw stock is accumulated
-func isBlockedByCatalystGuard(p int, cfg *models.Config, deltas []ProcessDeltas, stocks, inFlight, demand []int, isCat, isRootCat []bool, catReserve int) bool {
+func isBlockedByCatalystGuard(p int, cfg *config.Config, deltas []ProcessDeltas, stocks, inFlight, demand []int, isCat, isRootCat []bool, catReserve int) bool {
 	if hasFastCatalystProducer(p, cfg, deltas) {
 		for c := range cfg.StockNames {
 			if isCat[c] && !isRootCat[c] && stocks[c]+inFlight[c] > 0 {
@@ -141,7 +141,7 @@ func isBlockedByCatalystGuard(p int, cfg *models.Config, deltas []ProcessDeltas,
 }
 
 // determines if a process is producing intermediate stocks whose downstream demand is already met
-func isProcessCapped(p int, cfg *models.Config, deltas []ProcessDeltas, stocks, inFlight, demand []int, isTarget, isRootCat []bool, catReserve int) bool {
+func isProcessCapped(p int, cfg *config.Config, deltas []ProcessDeltas, stocks, inFlight, demand []int, isTarget, isRootCat []bool, catReserve int) bool {
 	if len(cfg.Targets) == 0 {
 		return false
 	}

@@ -1,4 +1,4 @@
-package cmd
+package solver
 
 import (
 	"context"
@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"krpsim/src/system/engine"
-	"krpsim/src/system/models"
-	"krpsim/src/system/parsing"
+	"krpsim/internal/config"
+	"krpsim/internal/verify"
 )
 
 func findConfigFile(tb testing.TB, relPaths ...string) string {
@@ -23,38 +22,24 @@ func findConfigFile(tb testing.TB, relPaths ...string) string {
 	return ""
 }
 
-func loadConfig(tb testing.TB, relPaths ...string) *models.Config {
+func loadConfig(tb testing.TB, relPaths ...string) *config.Config {
 	tb.Helper()
 	path := findConfigFile(tb, relPaths...)
-	cfg, err := parsing.ParseFile(path)
+	cfg, err := config.ParseFile(path)
 	if err != nil {
 		tb.Fatalf("failed to parse config %q: %v", path, err)
 	}
 	return cfg
 }
 
-func verifyTraceOutput(tb testing.TB, cfg *models.Config, res SimResult) {
+func verifyTraceOutput(tb testing.TB, cfg *config.Config, res SimResult) {
 	tb.Helper()
-	s := engine.NewState(cfg)
-	lastC := 0
-	for _, step := range res.Steps {
-		if step.Cycle < lastC {
-			tb.Fatalf("step cycle %d went backwards from %d", step.Cycle, lastC)
-		}
-		s.AdvanceTo(step.Cycle)
-		lastC = step.Cycle
-		pIdx, ok := cfg.ProcIndex[step.Proc]
-		if !ok {
-			tb.Fatalf("unknown process %q in trace", step.Proc)
-		}
-		if err := s.Launch(pIdx); err != nil {
-			tb.Fatalf("failed to launch %q at cycle %d: %v", step.Proc, step.Cycle, err)
-		}
+	if v := verify.Steps(cfg, res.Steps); !v.OK {
+		tb.Fatalf("trace rejected at cycle %d (%s): %s", v.ErrCycle, v.ErrProc, v.ErrReason)
 	}
-	s.Drain()
 }
 
-func logEfficiency(t *testing.T, name string, cfg *models.Config, target string, res SimResult, elapsed time.Duration, note string) {
+func logEfficiency(t *testing.T, name string, cfg *config.Config, target string, res SimResult, elapsed time.Duration, note string) {
 	t.Helper()
 	idx := cfg.StockIndex[target]
 	initQty := cfg.InitialStocks[idx]
@@ -68,7 +53,7 @@ func logEfficiency(t *testing.T, name string, cfg *models.Config, target string,
 }
 
 func TestGreedy_Simple(t *testing.T) {
-	cfg := loadConfig(t, "../../../resources/simple", "resources/simple")
+	cfg := loadConfig(t, "../../resources/simple", "resources/simple")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -85,7 +70,7 @@ func TestGreedy_Simple(t *testing.T) {
 }
 
 func TestGreedy_Ikea(t *testing.T) {
-	cfg := loadConfig(t, "../../../resources/ikea", "resources/ikea")
+	cfg := loadConfig(t, "../../resources/ikea", "resources/ikea")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -102,7 +87,7 @@ func TestGreedy_Ikea(t *testing.T) {
 }
 
 func TestGreedy_Steak(t *testing.T) {
-	cfg := loadConfig(t, "../../../resources/steak", "resources/steak")
+	cfg := loadConfig(t, "../../resources/steak", "resources/steak")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -116,7 +101,7 @@ func TestGreedy_Steak(t *testing.T) {
 }
 
 func TestGreedy_Recre(t *testing.T) {
-	cfg := loadConfig(t, "../../../resources/recre", "resources/recre")
+	cfg := loadConfig(t, "../../resources/recre", "resources/recre")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -135,7 +120,7 @@ func TestGreedy_Recre(t *testing.T) {
 }
 
 func TestGreedy_Pomme(t *testing.T) {
-	cfg := loadConfig(t, "../../../resources/pomme", "resources/pomme")
+	cfg := loadConfig(t, "../../resources/pomme", "resources/pomme")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -150,7 +135,7 @@ func TestGreedy_Pomme(t *testing.T) {
 }
 
 func TestGreedy_Inception(t *testing.T) {
-	cfg := loadConfig(t, "../../../resources/inception", "resources/inception")
+	cfg := loadConfig(t, "../../resources/inception", "resources/inception")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -164,7 +149,7 @@ func TestGreedy_Inception(t *testing.T) {
 }
 
 func TestGreedy_Finite(t *testing.T) {
-	cfg := loadConfig(t, "../test-config/finite.krp", "src/system/test-config/finite.krp")
+	cfg := loadConfig(t, "../../configs/finite.krp", "configs/finite.krp")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -183,7 +168,7 @@ func TestGreedy_Finite(t *testing.T) {
 }
 
 func TestGreedy_Infinite(t *testing.T) {
-	cfg := loadConfig(t, "../test-config/infinite.krp", "src/system/test-config/infinite.krp")
+	cfg := loadConfig(t, "../../configs/infinite.krp", "configs/infinite.krp")
 	start := time.Now()
 	res := RunGreedy(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
@@ -197,7 +182,7 @@ func TestGreedy_Infinite(t *testing.T) {
 }
 
 func TestGreedy_ContextCancel(t *testing.T) {
-	cfg := loadConfig(t, "../test-config/infinite.krp", "src/system/test-config/infinite.krp")
+	cfg := loadConfig(t, "../../configs/infinite.krp", "configs/infinite.krp")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
@@ -206,7 +191,7 @@ func TestGreedy_ContextCancel(t *testing.T) {
 }
 
 func TestGreedy_PriorityUnit(t *testing.T) {
-	cfg := loadConfig(t, "../test-config/finite.krp", "src/system/test-config/finite.krp")
+	cfg := loadConfig(t, "../../configs/finite.krp", "configs/finite.krp")
 	prio := ComputePriority(cfg)
 
 	badgeIdx, ok := cfg.ProcIndex["stamp_novelty_badge"]
@@ -242,33 +227,33 @@ func runBenchConfig(b *testing.B, maxCycle int, paths ...string) {
 }
 
 func BenchmarkGreedy_Simple(b *testing.B) {
-	runBenchConfig(b, 10000, "../../../resources/simple", "resources/simple")
+	runBenchConfig(b, 10000, "../../resources/simple", "resources/simple")
 }
 
 func BenchmarkGreedy_Ikea(b *testing.B) {
-	runBenchConfig(b, 10000, "../../../resources/ikea", "resources/ikea")
+	runBenchConfig(b, 10000, "../../resources/ikea", "resources/ikea")
 }
 
 func BenchmarkGreedy_Steak(b *testing.B) {
-	runBenchConfig(b, 10000, "../../../resources/steak", "resources/steak")
+	runBenchConfig(b, 10000, "../../resources/steak", "resources/steak")
 }
 
 func BenchmarkGreedy_Recre(b *testing.B) {
-	runBenchConfig(b, 10000, "../../../resources/recre", "resources/recre")
+	runBenchConfig(b, 10000, "../../resources/recre", "resources/recre")
 }
 
 func BenchmarkGreedy_Pomme(b *testing.B) {
-	runBenchConfig(b, 10000, "../../../resources/pomme", "resources/pomme")
+	runBenchConfig(b, 10000, "../../resources/pomme", "resources/pomme")
 }
 
 func BenchmarkGreedy_Inception(b *testing.B) {
-	runBenchConfig(b, 10000, "../../../resources/inception", "resources/inception")
+	runBenchConfig(b, 10000, "../../resources/inception", "resources/inception")
 }
 
 func BenchmarkGreedy_Finite(b *testing.B) {
-	runBenchConfig(b, 10000, "../test-config/finite.krp", "src/system/test-config/finite.krp")
+	runBenchConfig(b, 10000, "../../configs/finite.krp", "configs/finite.krp")
 }
 
 func BenchmarkGreedy_Infinite(b *testing.B) {
-	runBenchConfig(b, 10000, "../test-config/infinite.krp", "src/system/test-config/infinite.krp")
+	runBenchConfig(b, 10000, "../../configs/infinite.krp", "configs/infinite.krp")
 }

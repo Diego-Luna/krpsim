@@ -1,4 +1,4 @@
-package models
+package config
 
 type StockDelta struct {
 	Stock int

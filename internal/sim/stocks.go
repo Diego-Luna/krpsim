@@ -1,12 +1,12 @@
-package engine
+package sim
 
 import (
 	"fmt"
-	"krpsim/src/system/models"
+	"krpsim/internal/config"
 )
 
 // i returns stock index and total quantity needed across proc.Needs
-func (s *State) aggregatedNeed(proc *models.Process, idx int) (int, int) {
+func (s *State) aggregatedNeed(proc *config.Process, idx int) (int, int) {
 	stockIdx := proc.Needs[idx].Stock
 	qty := proc.Needs[idx].Qty
 	if qty <= 0 {
@@ -27,7 +27,7 @@ func (s *State) aggregatedNeed(proc *models.Process, idx int) (int, int) {
 }
 
 // we verify that s.Stocks contains enough stock for proc.Needs
-func (s *State) checkNeeds(proc *models.Process) error {
+func (s *State) checkNeeds(proc *config.Process) error {
 	for i := 0; i < len(proc.Needs); i++ {
 		stockIdx, totalNeed := s.aggregatedNeed(proc, i)
 		if totalNeed <= 0 {
@@ -49,7 +49,7 @@ func (s *State) checkNeeds(proc *models.Process) error {
 }
 
 // we adds process result quantities to state stocks
-func (s *State) creditResults(proc *models.Process) {
+func (s *State) creditResults(proc *config.Process) {
 	if proc == nil {
 		return
 	}

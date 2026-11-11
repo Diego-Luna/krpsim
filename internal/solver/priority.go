@@ -1,9 +1,9 @@
-package cmd
+package solver
 
 import (
 	"sort"
 
-	"krpsim/src/system/models"
+	"krpsim/internal/config"
 )
 
 // ? maybe change the place for the models
@@ -23,7 +23,7 @@ type PriorityResult struct {
 }
 
 // Aggregates needs, results, and net per-stock changes for all processes
-func ComputeProcessDeltas(cfg *models.Config) []ProcessDeltas {
+func ComputeProcessDeltas(cfg *config.Config) []ProcessDeltas {
 	deltas := make([]ProcessDeltas, len(cfg.Processes))
 	numStocks := len(cfg.StockNames)
 
@@ -53,7 +53,7 @@ func ComputeProcessDeltas(cfg *models.Config) []ProcessDeltas {
 }
 
 // * runs backward propagation to propagate stock values and mark useful processes
-func propagateStockValues(cfg *models.Config, deltas []ProcessDeltas, stockVal []float64, useful []bool) {
+func propagateStockValues(cfg *config.Config, deltas []ProcessDeltas, stockVal []float64, useful []bool) {
 	for pass := 0; pass < 15; pass++ {
 		for pIdx := range cfg.Processes {
 			d := &deltas[pIdx]
@@ -77,7 +77,7 @@ func propagateStockValues(cfg *models.Config, deltas []ProcessDeltas, stockVal [
 }
 
 // computes the priority score for a useful process
-func scoreProcess(proc *models.Process, stockVal []float64) float64 {
+func scoreProcess(proc *config.Process, stockVal []float64) float64 {
 	sumRes := 0.0
 	for _, res := range proc.Results {
 		if res.Stock >= 0 && res.Stock < len(stockVal) {
@@ -95,7 +95,7 @@ func scoreProcess(proc *models.Process, stockVal []float64) float64 {
 }
 
 // ! ranks useful processes backwards from cfg.Targets
-func ComputePriority(cfg *models.Config) PriorityResult {
+func ComputePriority(cfg *config.Config) PriorityResult {
 	if cfg == nil {
 		return PriorityResult{}
 	}

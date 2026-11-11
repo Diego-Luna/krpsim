@@ -1,10 +1,8 @@
-package parsing
+package config
 
 import (
 	"strings"
 	"testing"
-
-	"krpsim/src/system/models"
 )
 
 // TestParseAllResourceFiles verifies that all 6 sample resource files parse correctly.
@@ -16,12 +14,12 @@ func TestParseAllResourceFiles(t *testing.T) {
 		optimizeTime bool
 		targetNames  []string
 	}{
-		{"simple", "../../../resources/simple", 3, true, []string{"client_content"}},
-		{"ikea", "../../../resources/ikea", 4, true, []string{"armoire"}},
-		{"recre", "../../../resources/recre", 5, false, []string{"marelle"}},
-		{"pomme", "../../../resources/pomme", 18, false, []string{"euro"}},
-		{"steak", "../../../resources/steak", 5, true, []string{"steak_cuit"}},
-		{"inception", "../../../resources/inception", 11, false, []string{"year"}},
+		{"simple", "../../resources/simple", 3, true, []string{"client_content"}},
+		{"ikea", "../../resources/ikea", 4, true, []string{"armoire"}},
+		{"recre", "../../resources/recre", 5, false, []string{"marelle"}},
+		{"pomme", "../../resources/pomme", 18, false, []string{"euro"}},
+		{"steak", "../../resources/steak", 5, true, []string{"steak_cuit"}},
+		{"inception", "../../resources/inception", 11, false, []string{"year"}},
 	}
 
 	for _, tc := range tests {
@@ -41,7 +39,7 @@ func TestParseAllResourceFiles(t *testing.T) {
 	}
 }
 
-func assertTargets(t *testing.T, cfg *models.Config, expectedNames []string) {
+func assertTargets(t *testing.T, cfg *Config, expectedNames []string) {
 	t.Helper()
 	if len(cfg.Targets) != len(expectedNames) {
 		t.Fatalf("expected %d targets, got %d", len(expectedNames), len(cfg.Targets))
@@ -59,7 +57,7 @@ func assertTargets(t *testing.T, cfg *models.Config, expectedNames []string) {
 
 // TestSimpleResourceDetails checks exact fields of the simple resource.
 func TestSimpleResourceDetails(t *testing.T) {
-	cfg, err := ParseFile("../../../resources/simple")
+	cfg, err := ParseFile("../../resources/simple")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +83,7 @@ func TestSimpleResourceDetails(t *testing.T) {
 
 // TestRecreEmptyResults checks that empty results (e.g. `manger:(bonbon:1)::10`) parse as empty.
 func TestRecreEmptyResults(t *testing.T) {
-	cfg, err := ParseFile("../../../resources/recre")
+	cfg, err := ParseFile("../../resources/recre")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1,38 +1,38 @@
-package engine
+package sim
 
 import (
-	"krpsim/src/system/models"
+	"krpsim/internal/config"
 	"testing"
 )
 
-func helperMakeConfig() *models.Config {
-	return &models.Config{
+func helperMakeConfig() *config.Config {
+	return &config.Config{
 		StockNames:    []string{"poele", "pate", "crepe", "farine", "lait"},
 		StockIndex:    map[string]int{"poele": 0, "pate": 1, "crepe": 2, "farine": 3, "lait": 4},
 		InitialStocks: []int{1, 2, 0, 10, 5},
-		Processes: []models.Process{
+		Processes: []config.Process{
 			{
 				Name:    "cuire_crepe",
-				Needs:   []models.StockDelta{{Stock: 0, Qty: 1}, {Stock: 1, Qty: 1}},
-				Results: []models.StockDelta{{Stock: 0, Qty: 1}, {Stock: 2, Qty: 1}},
+				Needs:   []config.StockDelta{{Stock: 0, Qty: 1}, {Stock: 1, Qty: 1}},
+				Results: []config.StockDelta{{Stock: 0, Qty: 1}, {Stock: 2, Qty: 1}},
 				Delay:   5,
 			},
 			{
 				Name:    "faire_pate",
-				Needs:   []models.StockDelta{{Stock: 3, Qty: 2}, {Stock: 4, Qty: 1}},
-				Results: []models.StockDelta{{Stock: 1, Qty: 2}},
+				Needs:   []config.StockDelta{{Stock: 3, Qty: 2}, {Stock: 4, Qty: 1}},
+				Results: []config.StockDelta{{Stock: 1, Qty: 2}},
 				Delay:   2,
 			},
 			{
 				Name:    "instant_mix",
-				Needs:   []models.StockDelta{{Stock: 3, Qty: 1}},
-				Results: []models.StockDelta{{Stock: 1, Qty: 1}},
+				Needs:   []config.StockDelta{{Stock: 3, Qty: 1}},
+				Results: []config.StockDelta{{Stock: 1, Qty: 1}},
 				Delay:   0,
 			},
 			{
 				Name:    "free_gift",
-				Needs:   []models.StockDelta{},
-				Results: []models.StockDelta{{Stock: 3, Qty: 5}},
+				Needs:   []config.StockDelta{},
+				Results: []config.StockDelta{{Stock: 3, Qty: 5}},
 				Delay:   1,
 			},
 		},
@@ -116,13 +116,13 @@ func TestMaxRuns(t *testing.T) {
 }
 
 func TestMaxRunsDuplicateNeeds(t *testing.T) {
-	cfg := &models.Config{
+	cfg := &config.Config{
 		StockNames:    []string{"bois"},
 		InitialStocks: []int{9},
-		Processes: []models.Process{
+		Processes: []config.Process{
 			{
 				Name:  "double_need",
-				Needs: []models.StockDelta{{Stock: 0, Qty: 2}, {Stock: 0, Qty: 3}},
+				Needs: []config.StockDelta{{Stock: 0, Qty: 2}, {Stock: 0, Qty: 3}},
 			},
 		},
 	}
@@ -381,14 +381,14 @@ func TestNilSafety(t *testing.T) {
 }
 
 func TestCreditResultsExtendsStocks(t *testing.T) {
-	cfg := &models.Config{
+	cfg := &config.Config{
 		StockNames:    []string{"a"},
 		InitialStocks: []int{5},
-		Processes: []models.Process{
+		Processes: []config.Process{
 			{
 				Name:    "produce_new_stock",
-				Needs:   []models.StockDelta{},
-				Results: []models.StockDelta{{Stock: 3, Qty: 10}}, // Stock index 3 > len(Stocks)=1
+				Needs:   []config.StockDelta{},
+				Results: []config.StockDelta{{Stock: 3, Qty: 10}}, // Stock index 3 > len(Stocks)=1
 				Delay:   0,
 			},
 		},

@@ -1,11 +1,9 @@
-package parsing
+package config
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"krpsim/src/system/models"
 )
 
 // i splits a line on ':' at parenthesis depth 0
@@ -54,7 +52,7 @@ func SplitProcess(line string) ([]string, error) {
 
 // * parseStockDeltas parses a stock delta list like "(need1:qty1;need2:qty2)", so empty string or "()" yields nil deltas
 // * Duplicate stocks are merged/summed
-func parseStockDeltas(s string, cfg *models.Config) ([]models.StockDelta, error) {
+func parseStockDeltas(s string, cfg *Config) ([]StockDelta, error) {
 	if s == "" || s == "()" {
 		return nil, nil
 	}
@@ -68,7 +66,7 @@ func parseStockDeltas(s string, cfg *models.Config) ([]models.StockDelta, error)
 	}
 
 	entries := strings.Split(inner, ";")
-	deltas := make([]models.StockDelta, 0, len(entries))
+	deltas := make([]StockDelta, 0, len(entries))
 	seen := make(map[int]int)
 
 	for _, entry := range entries {
@@ -91,58 +89,58 @@ func parseStockDeltas(s string, cfg *models.Config) ([]models.StockDelta, error)
 }
 
 // * parses a single "<stock>:<qty>" pair and auto-registers the stock
-func parseSingleDelta(entry string, cfg *models.Config) (models.StockDelta, error) {
+func parseSingleDelta(entry string, cfg *Config) (StockDelta, error) {
 	sub := strings.Split(entry, ":")
 	if len(sub) != 2 {
-		return models.StockDelta{}, fmt.Errorf("invalid stock delta format %q, expected <stock>:<qty>", entry)
+		return StockDelta{}, fmt.Errorf("invalid stock delta format %q, expected <stock>:<qty>", entry)
 	}
 	stockName := strings.TrimSpace(sub[0])
 	qtyStr := strings.TrimSpace(sub[1])
 	if stockName == "" {
-		return models.StockDelta{}, fmt.Errorf("stock name cannot be empty")
+		return StockDelta{}, fmt.Errorf("stock name cannot be empty")
 	}
 
 	qty, err := strconv.Atoi(qtyStr)
 	if err != nil {
-		return models.StockDelta{}, fmt.Errorf("invalid quantity %q for stock %q", qtyStr, stockName)
+		return StockDelta{}, fmt.Errorf("invalid quantity %q for stock %q", qtyStr, stockName)
 	}
 	if qty <= 0 {
-		return models.StockDelta{}, fmt.Errorf("quantity for stock %q must be greater than 0, got %d", stockName, qty)
+		return StockDelta{}, fmt.Errorf("quantity for stock %q must be greater than 0, got %d", stockName, qty)
 	}
 
 	stockID := getOrRegisterStock(cfg, stockName, 0)
-	return models.StockDelta{Stock: stockID, Qty: qty}, nil
+	return StockDelta{Stock: stockID, Qty: qty}, nil
 }
 
 // * validates and constructs a Process from 4 colon-separated parts
-func parseProcess(parts []string, cfg *models.Config) (models.Process, error) {
+func parseProcess(parts []string, cfg *Config) (Process, error) {
 	name := parts[0]
 	if name == "" {
-		return models.Process{}, fmt.Errorf("process name cannot be empty")
+		return Process{}, fmt.Errorf("process name cannot be empty")
 	}
 	if _, exists := cfg.ProcIndex[name]; exists {
-		return models.Process{}, fmt.Errorf("duplicate process %s", name)
+		return Process{}, fmt.Errorf("duplicate process %s", name)
 	}
 
 	needs, err := parseStockDeltas(parts[1], cfg)
 	if err != nil {
-		return models.Process{}, fmt.Errorf("process %q needs: %w", name, err)
+		return Process{}, fmt.Errorf("process %q needs: %w", name, err)
 	}
 
 	results, err := parseStockDeltas(parts[2], cfg)
 	if err != nil {
-		return models.Process{}, fmt.Errorf("process %q results: %w", name, err)
+		return Process{}, fmt.Errorf("process %q results: %w", name, err)
 	}
 
 	delay, err := strconv.Atoi(parts[3])
 	if err != nil {
-		return models.Process{}, fmt.Errorf("process %q invalid delay %q", name, parts[3])
+		return Process{}, fmt.Errorf("process %q invalid delay %q", name, parts[3])
 	}
 	if delay < 0 {
-		return models.Process{}, fmt.Errorf("process %q delay must be >= 0, got %d", name, delay)
+		return Process{}, fmt.Errorf("process %q delay must be >= 0, got %d", name, delay)
 	}
 
-	proc := models.Process{
+	proc := Process{
 		Name:    name,
 		Needs:   needs,
 		Results: results,
