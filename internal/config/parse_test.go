@@ -101,39 +101,49 @@ func TestRecreEmptyResults(t *testing.T) {
 	}
 }
 
-// TestSplitProcess verifies parenthesis-aware splitting on ':'.
-func TestSplitProcess(t *testing.T) {
-	parts, err := SplitProcess("achat_materiel:(euro:8):(materiel:1):10")
+func TestSplitTopLevel(t *testing.T) {
+	parts, err := splitTopLevel("achat_materiel:(euro:8):(materiel:1):10")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	expected := []string{"achat_materiel", "(euro:8)", "(materiel:1)", "10"}
+	if len(parts) != len(expected) {
+		t.Fatalf("got %d parts, want %d: %q", len(parts), len(expected), parts)
+	}
 	for i, exp := range expected {
 		if parts[i] != exp {
 			t.Errorf("part[%d] = %q, want %q", i, parts[i], exp)
 		}
 	}
 
-	emptyParts, err := SplitProcess("manger:(bonbon:1)::10")
+	emptyParts, err := splitTopLevel("manger:(bonbon:1)::10")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if emptyParts[2] != "" {
-		t.Errorf("expected empty results part, got %q", emptyParts[2])
+	if len(emptyParts) != 4 || emptyParts[2] != "" {
+		t.Errorf("expected 4 parts with empty results, got %q", emptyParts)
 	}
 }
 
-// TestSplitProcessErrors verifies error handling for malformed process lines.
-func TestSplitProcessErrors(t *testing.T) {
-	badInputs := []string{
+func TestSplitTopLevelErrors(t *testing.T) {
+	for _, in := range []string{
 		"unclosed:(need:1:(res:1):10",
 		"unexpected:need:1):(res:1):10",
+	} {
+		if _, err := splitTopLevel(in); err == nil {
+			t.Errorf("splitTopLevel(%q) expected error, got nil", in)
+		}
+	}
+}
+
+func TestProcessFieldCount(t *testing.T) {
+	for _, in := range []string{
 		"too_few:(need:1):10",
 		"too_many:(need:1):(res:1):10:extra",
-	}
-	for _, in := range badInputs {
-		if _, err := SplitProcess(in); err == nil {
-			t.Errorf("SplitProcess(%q) expected error, got nil", in)
+	} {
+		cfg := "a:1\n" + in + "\noptimize:(time)\n"
+		if _, err := Parse(strings.NewReader(cfg)); err == nil {
+			t.Errorf("expected %q to be rejected", in)
 		}
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"krpsim/internal/verify"
 )
 
-func Run(w io.Writer, cfg *config.Config, res solver.SimResult) {
+func Run(w io.Writer, cfg *config.Config, res solver.Result) {
 	fmt.Fprintf(w, "> %s= %d processes, %d stocks, %d to optimize\n",
 		trace.Mascot, len(cfg.Processes), len(cfg.StockNames), optCount(cfg))
 	fmt.Fprintln(w, trace.Evaluating)

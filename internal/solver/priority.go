@@ -6,131 +6,74 @@ import (
 	"krpsim/internal/config"
 )
 
-// ? maybe change the place for the models
-
-// * ProcessDeltas holds per-stock needs, results, and net production for a process
-type ProcessDeltas struct {
-	Needs   []int
-	Results []int
-	Net     []int
-}
-
-// * PriorityResult holds the backward propagation outcome, useful processes, and execution order
-type PriorityResult struct {
-	Order  []int
-	Useful []bool
-	Deltas []ProcessDeltas
-}
-
-// Aggregates needs, results, and net per-stock changes for all processes
-func ComputeProcessDeltas(cfg *config.Config) []ProcessDeltas {
-	deltas := make([]ProcessDeltas, len(cfg.Processes))
-	numStocks := len(cfg.StockNames)
-
-	for pIdx := range cfg.Processes {
-		proc := &cfg.Processes[pIdx]
-		d := ProcessDeltas{
-			Needs:   make([]int, numStocks),
-			Results: make([]int, numStocks),
-			Net:     make([]int, numStocks),
-		}
-		for _, need := range proc.Needs {
-			if need.Stock >= 0 && need.Stock < numStocks {
-				d.Needs[need.Stock] += need.Qty
-			}
-		}
-		for _, res := range proc.Results {
-			if res.Stock >= 0 && res.Stock < numStocks {
-				d.Results[res.Stock] += res.Qty
-			}
-		}
-		for s := 0; s < numStocks; s++ {
-			d.Net[s] = d.Results[s] - d.Needs[s]
-		}
-		deltas[pIdx] = d
-	}
-	return deltas
-}
-
-// * runs backward propagation to propagate stock values and mark useful processes
-func propagateStockValues(cfg *config.Config, deltas []ProcessDeltas, stockVal []float64, useful []bool) {
-	for pass := 0; pass < 15; pass++ {
-		for pIdx := range cfg.Processes {
-			d := &deltas[pIdx]
-			for s, netQty := range d.Net {
-				if netQty <= 0 || stockVal[s] <= 0 {
-					continue
-				}
-				useful[pIdx] = true
-				for n, needQty := range d.Needs {
-					if needQty <= 0 {
-						continue
-					}
-					cand := (stockVal[s] * float64(netQty)) / (float64(needQty) * 1.5)
-					if cand > stockVal[n] {
-						stockVal[n] = cand
-					}
-				}
-			}
-		}
-	}
-}
-
-// computes the priority score for a useful process
-func scoreProcess(proc *config.Process, stockVal []float64) float64 {
-	sumRes := 0.0
-	for _, res := range proc.Results {
-		if res.Stock >= 0 && res.Stock < len(stockVal) {
-			sumRes += stockVal[res.Stock] * float64(res.Qty)
-		}
-	}
-	sumNeed := 0.0
-	for _, need := range proc.Needs {
-		if need.Stock >= 0 && need.Stock < len(stockVal) {
-			sumNeed += stockVal[need.Stock] * float64(need.Qty)
-		}
-	}
-	num := sumRes - (sumNeed * 0.3)
-	return num / float64(proc.Delay+1)
-}
-
-// ! ranks useful processes backwards from cfg.Targets
-func ComputePriority(cfg *config.Config) PriorityResult {
-	if cfg == nil {
-		return PriorityResult{}
-	}
-	numStocks, numProcs := len(cfg.StockNames), len(cfg.Processes)
-	stockVal, useful := make([]float64, numStocks), make([]bool, numProcs)
-	deltas := ComputeProcessDeltas(cfg)
+// rank orders the useful processes best first. A process is useful when it
+// produces something that leads to an optimize target.
+func rank(cfg *config.Config) (order []int, useful []bool) {
+	value := make([]float64, len(cfg.StockNames))
+	useful = make([]bool, len(cfg.Processes))
 
 	if len(cfg.Targets) == 0 {
 		for p := range useful {
 			useful[p] = true
 		}
-		for s := range stockVal {
-			stockVal[s] = 1.0
+		for s := range value {
+			value[s] = neutralValue
 		}
 	} else {
 		for _, t := range cfg.Targets {
-			if t >= 0 && t < numStocks {
-				stockVal[t] = 1000.0
-			}
+			value[t] = targetValue
 		}
-		propagateStockValues(cfg, deltas, stockVal, useful)
+		propagateValue(cfg, value, useful)
 	}
 
-	scores, order := make([]float64, numProcs), make([]int, 0, numProcs)
+	score := make([]float64, len(cfg.Processes))
 	for p := range cfg.Processes {
 		if useful[p] {
-			scores[p] = scoreProcess(&cfg.Processes[p], stockVal)
+			score[p] = scoreOf(&cfg.Processes[p], value)
 			order = append(order, p)
 		}
 	}
 	sort.SliceStable(order, func(i, j int) bool {
-		if scores[order[i]] != scores[order[j]] {
-			return scores[order[i]] > scores[order[j]]
+		a, b := order[i], order[j]
+		if score[a] != score[b] {
+			return score[a] > score[b]
 		}
-		return order[i] < order[j]
+		return a < b
 	})
-	return PriorityResult{Order: order, Useful: useful, Deltas: deltas}
+	return order, useful
+}
+
+// propagateValue walks value backwards from the targets: an input is worth
+// what it helps produce, shrunk by valueDecay at every step.
+func propagateValue(cfg *config.Config, value []float64, useful []bool) {
+	for range valuePasses {
+		for p := range cfg.Processes {
+			proc := &cfg.Processes[p]
+			for s, net := range proc.Net {
+				if net <= 0 || value[s] <= 0 {
+					continue
+				}
+				useful[p] = true
+				for n, need := range proc.NeedQty {
+					if need <= 0 {
+						continue
+					}
+					if v := value[s] * float64(net) / (float64(need) * valueDecay); v > value[n] {
+						value[n] = v
+					}
+				}
+			}
+		}
+	}
+}
+
+func scoreOf(proc *config.Process, value []float64) float64 {
+	gain, cost := 0.0, 0.0
+	for _, r := range proc.Results {
+		gain += value[r.Stock] * float64(r.Qty)
+	}
+	for _, n := range proc.Needs {
+		cost += value[n.Stock] * float64(n.Qty)
+	}
+	return (gain - cost*inputPenalty) / float64(proc.Delay+1)
 }

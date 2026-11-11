@@ -8,87 +8,55 @@ import (
 	"krpsim/internal/trace"
 )
 
-// * SimResult encapsulates the output of a greedy simulation
-type SimResult struct {
+type Result struct {
 	Steps     []trace.Step
 	LastCycle int
 	Stocks    []int
-	Exhausted bool
 }
 
-// returns a boolean slice indicating which stocks are targets
-func buildTargetSet(cfg *config.Config) []bool {
-	isTarget := make([]bool, len(cfg.StockNames))
-	for _, t := range cfg.Targets {
-		if t >= 0 && t < len(isTarget) {
-			isTarget[t] = true
-		}
-	}
-	return isTarget
-}
-
-// attempts to greedily launch runnable processes at current state cycle up to 1000 times
-func tryLaunchCycle(cfg *config.Config, prio PriorityResult, state *sim.State, inFlight, demand []int, isTarget, isCat, isRootCat []bool, catReserve int, steps *[]trace.Step) {
-	for launchCount := 0; launchCount < 1000; launchCount++ {
-		launched := false
-		state.InFlightStocks(inFlight)
-		for _, p := range prio.Order {
-			if state.MaxRuns(p, nil) <= 0 {
-				continue
-			}
-			if isBlockedByCatalystGuard(p, cfg, prio.Deltas, state.Stocks, inFlight, demand, isCat, isRootCat, catReserve) {
-				continue
-			}
-			if isProcessCapped(p, cfg, prio.Deltas, state.Stocks, inFlight, demand, isTarget, isRootCat, catReserve) {
-				continue
-			}
-			if err := state.Launch(p); err != nil {
-				continue
-			}
-			*steps = append(*steps, trace.Step{Cycle: state.Cycle, Proc: cfg.Processes[p].Name})
-			launched = true
-			break
-		}
-		if !launched {
-			break
-		}
-	}
-}
-
-// executes the greedy krpsim solver respecting backward priorities and stock reservations
-func RunGreedy(ctx context.Context, cfg *config.Config, maxCycle int) SimResult {
-	if cfg == nil {
-		return SimResult{Exhausted: true}
-	}
+// Run plays the greedy schedule until nothing can start, maxCycle is
+// passed (0 picks the default) or ctx runs out.
+func Run(ctx context.Context, cfg *config.Config, maxCycle int) Result {
 	if maxCycle <= 0 {
-		maxCycle = 10000
+		maxCycle = defaultMaxCycle
 	}
-	state := sim.NewState(cfg)
-	prio := ComputePriority(cfg)
-	isTarget := buildTargetSet(cfg)
-	demand := computeStockDemand(cfg, prio.Useful, prio.Deltas)
-	isCat, isRootCat, catReserve := computeCatalystThreshold(cfg, prio.Deltas)
-	inFlight := make([]int, len(cfg.StockNames))
-	var steps []trace.Step
-	exhausted := false
+	st := sim.NewState(cfg)
+	pl := newPlanner(cfg, st)
 
-	for {
-		if ctx.Err() != nil || state.Cycle > maxCycle {
+	var steps []trace.Step
+	for ctx.Err() == nil && st.Cycle <= maxCycle {
+		steps = pl.launchAll(steps)
+		next, ok := st.NextEvent()
+		if !ok || next > maxCycle || ctx.Err() != nil {
 			break
 		}
-		tryLaunchCycle(cfg, prio, state, inFlight, demand, isTarget, isCat, isRootCat, catReserve, &steps)
-		nextCycle, hasEvent := state.NextEvent()
-		if !hasEvent {
-			exhausted = true
-			break
-		}
-		if nextCycle > maxCycle || ctx.Err() != nil {
-			break
-		}
-		state.AdvanceTo(nextCycle)
+		st.AdvanceTo(next)
 	}
-	state.Drain()
-	finalStocks := make([]int, len(state.Stocks))
-	copy(finalStocks, state.Stocks)
-	return SimResult{Steps: steps, LastCycle: state.Cycle, Stocks: finalStocks, Exhausted: exhausted}
+	st.Drain()
+	return Result{Steps: steps, LastCycle: st.Cycle, Stocks: append([]int(nil), st.Stocks...)}
+}
+
+// launchAll starts processes one at a time, best first, until nothing else is allowed this cycle.
+func (pl *planner) launchAll(steps []trace.Step) []trace.Step {
+	for range maxLaunchesPerCycle {
+		p, ok := pl.pick()
+		if !ok {
+			break
+		}
+		if err := pl.st.Launch(p); err != nil {
+			panic(err) // pick only returns launchable processes
+		}
+		steps = append(steps, trace.Step{Cycle: pl.st.Cycle, Proc: pl.cfg.Processes[p].Name})
+	}
+	return steps
+}
+
+func (pl *planner) pick() (int, bool) {
+	pl.st.InFlight(pl.inFlight)
+	for _, p := range pl.order {
+		if pl.st.CanLaunch(p) && !pl.blocked(p) {
+			return p, true
+		}
+	}
+	return 0, false
 }

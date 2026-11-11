@@ -32,14 +32,14 @@ func loadConfig(tb testing.TB, relPaths ...string) *config.Config {
 	return cfg
 }
 
-func verifyTraceOutput(tb testing.TB, cfg *config.Config, res SimResult) {
+func verifyTraceOutput(tb testing.TB, cfg *config.Config, res Result) {
 	tb.Helper()
 	if v := verify.Steps(cfg, res.Steps); !v.OK {
 		tb.Fatalf("trace rejected at cycle %d (%s): %s", v.ErrCycle, v.ErrProc, v.ErrReason)
 	}
 }
 
-func logEfficiency(t *testing.T, name string, cfg *config.Config, target string, res SimResult, elapsed time.Duration, note string) {
+func logEfficiency(t *testing.T, name string, cfg *config.Config, target string, res Result, elapsed time.Duration, note string) {
 	t.Helper()
 	idx := cfg.StockIndex[target]
 	initQty := cfg.InitialStocks[idx]
@@ -55,7 +55,7 @@ func logEfficiency(t *testing.T, name string, cfg *config.Config, target string,
 func TestGreedy_Simple(t *testing.T) {
 	cfg := loadConfig(t, "../../resources/simple", "resources/simple")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	if res.LastCycle != 60 {
@@ -72,7 +72,7 @@ func TestGreedy_Simple(t *testing.T) {
 func TestGreedy_Ikea(t *testing.T) {
 	cfg := loadConfig(t, "../../resources/ikea", "resources/ikea")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	if res.LastCycle != 50 {
@@ -89,7 +89,7 @@ func TestGreedy_Ikea(t *testing.T) {
 func TestGreedy_Steak(t *testing.T) {
 	cfg := loadConfig(t, "../../resources/steak", "resources/steak")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	cuitIdx := cfg.StockIndex["steak_cuit"]
@@ -103,7 +103,7 @@ func TestGreedy_Steak(t *testing.T) {
 func TestGreedy_Recre(t *testing.T) {
 	cfg := loadConfig(t, "../../resources/recre", "resources/recre")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	marelleIdx := cfg.StockIndex["marelle"]
@@ -122,7 +122,7 @@ func TestGreedy_Recre(t *testing.T) {
 func TestGreedy_Pomme(t *testing.T) {
 	cfg := loadConfig(t, "../../resources/pomme", "resources/pomme")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	euroIdx := cfg.StockIndex["euro"]
@@ -137,7 +137,7 @@ func TestGreedy_Pomme(t *testing.T) {
 func TestGreedy_Inception(t *testing.T) {
 	cfg := loadConfig(t, "../../resources/inception", "resources/inception")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	yearIdx := cfg.StockIndex["year"]
@@ -151,7 +151,7 @@ func TestGreedy_Inception(t *testing.T) {
 func TestGreedy_Finite(t *testing.T) {
 	cfg := loadConfig(t, "../../configs/finite.krp", "configs/finite.krp")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	satIdx := cfg.StockIndex["orbital_satellite"]
@@ -170,7 +170,7 @@ func TestGreedy_Finite(t *testing.T) {
 func TestGreedy_Infinite(t *testing.T) {
 	cfg := loadConfig(t, "../../configs/infinite.krp", "configs/infinite.krp")
 	start := time.Now()
-	res := RunGreedy(context.Background(), cfg, 10000)
+	res := Run(context.Background(), cfg, 10000)
 	elapsed := time.Since(start)
 
 	bioIdx := cfg.StockIndex["biodiesel"]
@@ -186,25 +186,25 @@ func TestGreedy_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	res := RunGreedy(ctx, cfg, 100000)
+	res := Run(ctx, cfg, 100000)
 	verifyTraceOutput(t, cfg, res)
 }
 
 func TestGreedy_PriorityUnit(t *testing.T) {
 	cfg := loadConfig(t, "../../configs/finite.krp", "configs/finite.krp")
-	prio := ComputePriority(cfg)
+	order, useful := rank(cfg)
 
 	badgeIdx, ok := cfg.ProcIndex["stamp_novelty_badge"]
-	if ok && prio.Useful[badgeIdx] {
+	if ok && useful[badgeIdx] {
 		t.Errorf("expected stamp_novelty_badge to be marked useless")
 	}
 
 	satIdx, ok := cfg.ProcIndex["assemble_orbital_satellite"]
-	if ok && !prio.Useful[satIdx] {
+	if ok && !useful[satIdx] {
 		t.Errorf("expected assemble_orbital_satellite to be marked useful")
 	}
 
-	for _, p := range prio.Order {
+	for _, p := range order {
 		if p == badgeIdx {
 			t.Errorf("stamp_novelty_badge must not be in priority Order")
 		}
@@ -218,7 +218,7 @@ func runBenchConfig(b *testing.B, maxCycle int, paths ...string) {
 	b.ReportAllocs()
 	var totalSteps int
 	for i := 0; i < b.N; i++ {
-		res := RunGreedy(ctx, cfg, maxCycle)
+		res := Run(ctx, cfg, maxCycle)
 		totalSteps += len(res.Steps)
 	}
 	if b.N > 0 {

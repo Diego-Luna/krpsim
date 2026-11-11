@@ -66,70 +66,30 @@ func TestNewState(t *testing.T) {
 	if cfg.InitialStocks[0] == 999 {
 		t.Error("modifying State.Stocks mutated Config.InitialStocks (not cloned)")
 	}
-	if s.InFlightCount() != 0 {
-		t.Errorf("expected 0 in flight, got %d", s.InFlightCount())
+	if len(s.events) != 0 {
+		t.Errorf("expected 0 in flight, got %d", len(s.events))
 	}
 	if next, ok := s.NextEvent(); ok || next != 0 {
 		t.Errorf("expected NextEvent (0, false), got (%d, %t)", next, ok)
 	}
-	if nilState := NewState(nil); nilState != nil {
-		t.Error("expected nil for NewState(nil)")
-	}
 }
 
-func TestMaxRuns(t *testing.T) {
+func TestCanLaunch(t *testing.T) {
 	cfg := helperMakeConfig()
 	s := NewState(cfg)
 
-	// cuire_crepe needs poele:1, pate:1. Stocks: poele=1, pate=2 -> max 1 run
-	if runs := s.MaxRuns(0, nil); runs != 1 {
-		t.Errorf("expected MaxRuns=1 for cuire_crepe, got %d", runs)
+	// cuire_crepe needs poele:1, pate:1 and both are there
+	if !s.CanLaunch(0) {
+		t.Error("expected cuire_crepe to be launchable")
+	}
+	// free_gift has no needs at all
+	if !s.CanLaunch(3) {
+		t.Error("expected free_gift to be launchable")
 	}
 
-	// faire_pate needs farine:2, lait:1. Stocks: farine=10, lait=5 -> max 5 runs
-	if runs := s.MaxRuns(1, nil); runs != 5 {
-		t.Errorf("expected MaxRuns=5 for faire_pate, got %d", runs)
-	}
-
-	// Custom stocks passed explicitly
-	customStocks := []int{3, 10, 0, 0, 0}
-	if runs := s.MaxRuns(0, customStocks); runs != 3 {
-		t.Errorf("expected MaxRuns=3 with custom stocks, got %d", runs)
-	}
-
-	// free_gift has no needs -> DefaultMaxRunsCap
-	if runs := s.MaxRuns(3, nil); runs != DefaultMaxRunsCap {
-		t.Errorf("expected MaxRuns=%d for free_gift, got %d", DefaultMaxRunsCap, runs)
-	}
-
-	// Invalid process index or nil handling
-	if runs := s.MaxRuns(-1, nil); runs != 0 {
-		t.Errorf("expected 0 for invalid index, got %d", runs)
-	}
-	if runs := s.MaxRuns(99, nil); runs != 0 {
-		t.Errorf("expected 0 for out of bound index, got %d", runs)
-	}
-	var nilState *State
-	if runs := nilState.MaxRuns(0, nil); runs != 0 {
-		t.Errorf("expected 0 for nil state, got %d", runs)
-	}
-}
-
-func TestMaxRunsDuplicateNeeds(t *testing.T) {
-	cfg := &config.Config{
-		StockNames:    []string{"bois"},
-		InitialStocks: []int{9},
-		Processes: []config.Process{
-			{
-				Name:  "double_need",
-				Needs: []config.StockDelta{{Stock: 0, Qty: 2}, {Stock: 0, Qty: 3}},
-			},
-		},
-	}
-	s := NewState(cfg)
-	// total need is 5. Stocks is 9. Max runs should be 1 (9 / 5 = 1).
-	if runs := s.MaxRuns(0, nil); runs != 1 {
-		t.Errorf("expected MaxRuns=1 for combined need of 5 with 9 stock, got %d", runs)
+	s.Stocks[0] = 0
+	if s.CanLaunch(0) {
+		t.Error("expected cuire_crepe to be blocked without poele")
 	}
 }
 
@@ -146,19 +106,6 @@ func TestLaunchValidationAndErrors(t *testing.T) {
 	// Verify stocks untouched
 	if s.Stocks[3] != 10 || s.Stocks[4] != 5 {
 		t.Errorf("stocks were modified on failed launch: farine=%d, lait=%d", s.Stocks[3], s.Stocks[4])
-	}
-
-	// Invalid process index
-	if err := s.Launch(-1); err == nil {
-		t.Error("expected error for process index -1")
-	}
-	if err := s.Launch(50); err == nil {
-		t.Error("expected error for out of bounds process index")
-	}
-
-	var nilState *State
-	if err := nilState.Launch(0); err == nil {
-		t.Error("expected error for nil state")
 	}
 }
 
@@ -180,8 +127,8 @@ func TestLaunchZeroDelay(t *testing.T) {
 	if s.Stocks[1] != initPate+1 {
 		t.Errorf("expected pate to increase immediately by 1, got %d", s.Stocks[1])
 	}
-	if s.InFlightCount() != 0 {
-		t.Errorf("expected 0 in flight for 0-delay process, got %d", s.InFlightCount())
+	if len(s.events) != 0 {
+		t.Errorf("expected 0 in flight for 0-delay process, got %d", len(s.events))
 	}
 	if s.Cycle != 0 {
 		t.Errorf("expected cycle to remain 0, got %d", s.Cycle)
@@ -202,8 +149,8 @@ func TestCatalystLocking(t *testing.T) {
 	if s.Stocks[1] != 1 {
 		t.Errorf("pate should be 1, got %d", s.Stocks[1])
 	}
-	if s.InFlightCount() != 1 {
-		t.Errorf("expected 1 in flight, got %d", s.InFlightCount())
+	if len(s.events) != 1 {
+		t.Errorf("expected 1 in flight, got %d", len(s.events))
 	}
 
 	// Attempting second launch with poele locked must fail
@@ -231,8 +178,8 @@ func TestCatalystLocking(t *testing.T) {
 	if s.Stocks[2] != 1 {
 		t.Errorf("crepe should be 1 at cycle 5, got %d", s.Stocks[2])
 	}
-	if s.InFlightCount() != 0 {
-		t.Errorf("expected 0 in flight at cycle 5, got %d", s.InFlightCount())
+	if len(s.events) != 0 {
+		t.Errorf("expected 0 in flight at cycle 5, got %d", len(s.events))
 	}
 
 	// Now second launch can proceed
@@ -271,8 +218,8 @@ func TestAdvanceToMultipleEvents(t *testing.T) {
 
 	// Advance to 1: free_gift finishes (end 1)
 	s.AdvanceTo(1)
-	if s.InFlightCount() != 1 {
-		t.Errorf("expected 1 in flight at cycle 1, got %d", s.InFlightCount())
+	if len(s.events) != 1 {
+		t.Errorf("expected 1 in flight at cycle 1, got %d", len(s.events))
 	}
 	if s.Stocks[3] != 10-2+5 { // 10 - 2 (pate) + 5 (gift)
 		t.Errorf("expected farine=13, got %d", s.Stocks[3])
@@ -280,8 +227,8 @@ func TestAdvanceToMultipleEvents(t *testing.T) {
 
 	// Advance to 2: faire_pate finishes (end 2)
 	s.AdvanceTo(2)
-	if s.InFlightCount() != 0 {
-		t.Errorf("expected 0 in flight at cycle 2, got %d", s.InFlightCount())
+	if len(s.events) != 0 {
+		t.Errorf("expected 0 in flight at cycle 2, got %d", len(s.events))
 	}
 	if s.Stocks[1] != 2+2 { // initial 2 + 2 created
 		t.Errorf("expected pate=4, got %d", s.Stocks[1])
@@ -310,8 +257,8 @@ func TestDrain(t *testing.T) {
 	_ = s.Launch(3) // delay 1 -> End: 1
 	_ = s.Launch(0) // delay 5 -> End: 5
 
-	if s.InFlightCount() != 3 {
-		t.Fatalf("expected 3 in flight, got %d", s.InFlightCount())
+	if len(s.events) != 3 {
+		t.Fatalf("expected 3 in flight, got %d", len(s.events))
 	}
 
 	end := s.Drain()
@@ -321,87 +268,42 @@ func TestDrain(t *testing.T) {
 	if s.Cycle != 5 {
 		t.Errorf("expected s.Cycle=5 after Drain, got %d", s.Cycle)
 	}
-	if s.InFlightCount() != 0 {
-		t.Errorf("expected 0 in flight after Drain, got %d", s.InFlightCount())
+	if len(s.events) != 0 {
+		t.Errorf("expected 0 in flight after Drain, got %d", len(s.events))
 	}
 }
 
 func TestHeapOrdering(t *testing.T) {
 	var h eventHeap
-	h.push(Event{End: 10, Proc: 2})
-	h.push(Event{End: 3, Proc: 5})
-	h.push(Event{End: 7, Proc: 1})
-	h.push(Event{End: 3, Proc: 1})
+	h.push(event{end: 10, proc: 2})
+	h.push(event{end: 3, proc: 5})
+	h.push(event{end: 7, proc: 1})
+	h.push(event{end: 3, proc: 1})
 
 	// Pop 1: End 3, Proc 1
 	e1 := h.pop()
-	if e1.End != 3 || e1.Proc != 1 {
-		t.Errorf("expected (3, 1), got (%d, %d)", e1.End, e1.Proc)
+	if e1.end != 3 || e1.proc != 1 {
+		t.Errorf("expected (3, 1), got (%d, %d)", e1.end, e1.proc)
 	}
 	// Pop 2: End 3, Proc 5
 	e2 := h.pop()
-	if e2.End != 3 || e2.Proc != 5 {
-		t.Errorf("expected (3, 5), got (%d, %d)", e2.End, e2.Proc)
+	if e2.end != 3 || e2.proc != 5 {
+		t.Errorf("expected (3, 5), got (%d, %d)", e2.end, e2.proc)
 	}
 	// Pop 3: End 7, Proc 1
 	e3 := h.pop()
-	if e3.End != 7 || e3.Proc != 1 {
-		t.Errorf("expected (7, 1), got (%d, %d)", e3.End, e3.Proc)
+	if e3.end != 7 || e3.proc != 1 {
+		t.Errorf("expected (7, 1), got (%d, %d)", e3.end, e3.proc)
 	}
 	// Pop 4: End 10, Proc 2
 	e4 := h.pop()
-	if e4.End != 10 || e4.Proc != 2 {
-		t.Errorf("expected (10, 2), got (%d, %d)", e4.End, e4.Proc)
+	if e4.end != 10 || e4.proc != 2 {
+		t.Errorf("expected (10, 2), got (%d, %d)", e4.end, e4.proc)
 	}
 	// Pop empty heap
 	empty := h.pop()
-	if empty.End != 0 || empty.Proc != 0 {
+	if empty != (event{}) {
 		t.Errorf("expected zero Event from empty pop, got %+v", empty)
-	}
-
-	// Peek empty heap
-	if _, ok := h.peek(); ok {
-		t.Error("expected ok=false for peek on empty heap")
-	}
-}
-
-func TestNilSafety(t *testing.T) {
-	var s *State
-	s.AdvanceTo(10)
-	if next, ok := s.NextEvent(); ok || next != 0 {
-		t.Errorf("expected (0, false), got (%d, %t)", next, ok)
-	}
-	if drained := s.Drain(); drained != 0 {
-		t.Errorf("expected 0, got %d", drained)
-	}
-	if count := s.InFlightCount(); count != 0 {
-		t.Errorf("expected 0, got %d", count)
-	}
-	s.creditResults(nil)
-}
-
-func TestCreditResultsExtendsStocks(t *testing.T) {
-	cfg := &config.Config{
-		StockNames:    []string{"a"},
-		InitialStocks: []int{5},
-		Processes: []config.Process{
-			{
-				Name:    "produce_new_stock",
-				Needs:   []config.StockDelta{},
-				Results: []config.StockDelta{{Stock: 3, Qty: 10}}, // Stock index 3 > len(Stocks)=1
-				Delay:   0,
-			},
-		},
-	}
-	s := NewState(cfg)
-	if err := s.Launch(0); err != nil {
-		t.Fatalf("launch failed: %v", err)
-	}
-	if len(s.Stocks) < 4 {
-		t.Fatalf("expected Stocks to be expanded to at least 4, got %d", len(s.Stocks))
-	}
-	if s.Stocks[3] != 10 {
-		t.Errorf("expected Stocks[3] = 10, got %d", s.Stocks[3])
 	}
 }
 
@@ -412,12 +314,12 @@ func TestInFlightStocks(t *testing.T) {
 		t.Fatalf("launch cuire_crepe failed: %v", err)
 	}
 	inFlight := make([]int, len(cfg.StockNames))
-	s.InFlightStocks(inFlight)
+	s.InFlight(inFlight)
 	if inFlight[0] != 1 || inFlight[2] != 1 {
 		t.Errorf("expected inFlight poele=1, crepe=1, got poele=%d, crepe=%d", inFlight[0], inFlight[2])
 	}
 	s.AdvanceTo(5)
-	s.InFlightStocks(inFlight)
+	s.InFlight(inFlight)
 	if inFlight[0] != 0 || inFlight[2] != 0 {
 		t.Errorf("expected inFlight cleared after AdvanceTo, got poele=%d, crepe=%d", inFlight[0], inFlight[2])
 	}

@@ -6,9 +6,8 @@ import (
 	"strings"
 )
 
-// i splits a line on ':' at parenthesis depth 0
-// and we returns an error if parentheses are unbalanced
-func splitColonDepth0(s string) ([]string, error) {
+// splitTopLevel splits on ':' outside parentheses.
+func splitTopLevel(s string) ([]string, error) {
 	var parts []string
 	start := 0
 	depth := 0
@@ -38,20 +37,8 @@ func splitColonDepth0(s string) ([]string, error) {
 	return parts, nil
 }
 
-// * SplitProcess splits a process line on ':' at parenthesis depth 0 into 4 parts: (name, needs, results, delay)
-func SplitProcess(line string) ([]string, error) {
-	parts, err := splitColonDepth0(line)
-	if err != nil {
-		return nil, err
-	}
-	if len(parts) != 4 {
-		return nil, fmt.Errorf("invalid process format: expected 4 colon-separated fields, got %d", len(parts))
-	}
-	return parts, nil
-}
-
-// * parseStockDeltas parses a stock delta list like "(need1:qty1;need2:qty2)", so empty string or "()" yields nil deltas
-// * Duplicate stocks are merged/summed
+// parseStockDeltas reads "(a:1;b:2)"; "" and "()" mean none. A stock listed
+// twice is summed, so later code can rely on each stock appearing once.
 func parseStockDeltas(s string, cfg *Config) ([]StockDelta, error) {
 	if s == "" || s == "()" {
 		return nil, nil
@@ -88,7 +75,6 @@ func parseStockDeltas(s string, cfg *Config) ([]StockDelta, error) {
 	return deltas, nil
 }
 
-// * parses a single "<stock>:<qty>" pair and auto-registers the stock
 func parseSingleDelta(entry string, cfg *Config) (StockDelta, error) {
 	sub := strings.Split(entry, ":")
 	if len(sub) != 2 {
@@ -112,32 +98,31 @@ func parseSingleDelta(entry string, cfg *Config) (StockDelta, error) {
 	return StockDelta{Stock: stockID, Qty: qty}, nil
 }
 
-// * validates and constructs a Process from 4 colon-separated parts
-func parseProcess(parts []string, cfg *Config) (Process, error) {
+func parseProcess(parts []string, cfg *Config) error {
 	name := parts[0]
 	if name == "" {
-		return Process{}, fmt.Errorf("process name cannot be empty")
+		return fmt.Errorf("process name cannot be empty")
 	}
 	if _, exists := cfg.ProcIndex[name]; exists {
-		return Process{}, fmt.Errorf("duplicate process %s", name)
+		return fmt.Errorf("duplicate process %s", name)
 	}
 
 	needs, err := parseStockDeltas(parts[1], cfg)
 	if err != nil {
-		return Process{}, fmt.Errorf("process %q needs: %w", name, err)
+		return fmt.Errorf("process %q needs: %w", name, err)
 	}
 
 	results, err := parseStockDeltas(parts[2], cfg)
 	if err != nil {
-		return Process{}, fmt.Errorf("process %q results: %w", name, err)
+		return fmt.Errorf("process %q results: %w", name, err)
 	}
 
 	delay, err := strconv.Atoi(parts[3])
 	if err != nil {
-		return Process{}, fmt.Errorf("process %q invalid delay %q", name, parts[3])
+		return fmt.Errorf("process %q invalid delay %q", name, parts[3])
 	}
 	if delay < 0 {
-		return Process{}, fmt.Errorf("process %q delay must be >= 0, got %d", name, delay)
+		return fmt.Errorf("process %q delay must be >= 0, got %d", name, delay)
 	}
 
 	proc := Process{
@@ -148,5 +133,5 @@ func parseProcess(parts []string, cfg *Config) (Process, error) {
 	}
 	cfg.ProcIndex[name] = len(cfg.Processes)
 	cfg.Processes = append(cfg.Processes, proc)
-	return proc, nil
+	return nil
 }

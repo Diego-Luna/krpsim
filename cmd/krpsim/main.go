@@ -34,5 +34,5 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(delay*0.9*float64(time.Second)))
 	defer cancel()
 
-	report.Run(os.Stdout, cfg, solver.RunGreedy(ctx, cfg, 0))
+	report.Run(os.Stdout, cfg, solver.Run(ctx, cfg, 0))
 }

@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-// * i read a configuration file from the given path and returns a parsed Config
 func ParseFile(path string) (*Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -20,7 +19,7 @@ func ParseFile(path string) (*Config, error) {
 	return Parse(f)
 }
 
-// *  is time to read krpsim configuration from an io.Reader and returns a populated Config
+// Parse reads stock lines, process lines and one optimize line; # starts a comment.
 func Parse(r io.Reader) (*Config, error) {
 	cfg := &Config{
 		StockIndex: make(map[string]int),
@@ -50,16 +49,17 @@ func Parse(r io.Reader) (*Config, error) {
 	if !hasOptimize {
 		return nil, fmt.Errorf("missing optimize directive")
 	}
+	cfg.finalize()
 	return cfg, nil
 }
 
-// i classifi and dispatches a single non-empty line
 func parseLine(line string, lineNum int, cfg *Config, declaredStocks map[string]bool, hasOptimize *bool) error {
-	parts, splitErr := splitColonDepth0(line)
+	parts, splitErr := splitTopLevel(line)
 	if splitErr != nil {
 		return fmt.Errorf("line %d: %w", lineNum, splitErr)
 	}
 
+	// with 4 fields it is a process that happens to be called "optimize"
 	if parts[0] == "optimize" && len(parts) != 4 {
 		if *hasOptimize {
 			return fmt.Errorf("line %d: duplicate optimize directive", lineNum)
@@ -75,7 +75,7 @@ func parseLine(line string, lineNum int, cfg *Config, declaredStocks map[string]
 	}
 
 	if len(parts) == 4 {
-		if _, err := parseProcess(parts, cfg); err != nil {
+		if err := parseProcess(parts, cfg); err != nil {
 			return fmt.Errorf("line %d: %w", lineNum, err)
 		}
 		return nil
@@ -88,7 +88,6 @@ func parseLine(line string, lineNum int, cfg *Config, declaredStocks map[string]
 	return fmt.Errorf("line %d: invalid line format: expected 2 or 4 colon-separated fields, got %d", lineNum, len(parts))
 }
 
-// parses stock an initial stock declaration like "<name>:<qty>"
 func parseStock(name, qtyStr string, lineNum int, cfg *Config, declaredStocks map[string]bool) error {
 	if name == "" {
 		return fmt.Errorf("line %d: stock name cannot be empty", lineNum)
@@ -106,7 +105,7 @@ func parseStock(name, qtyStr string, lineNum int, cfg *Config, declaredStocks ma
 	return nil
 }
 
-// ! parseOptimize parses the optimize line targets like "(time;stock1;stock2)"
+// parseOptimize reads "(time;stock1;...)".
 func parseOptimize(targetStr string, lineNum int, cfg *Config) error {
 	if !strings.HasPrefix(targetStr, "(") || !strings.HasSuffix(targetStr, ")") {
 		return fmt.Errorf("line %d: invalid optimize directive format, expected optimize:(...)", lineNum)
@@ -140,8 +139,8 @@ func parseOptimize(targetStr string, lineNum int, cfg *Config) error {
 	return nil
 }
 
-// i returns the ID for the given stock name,
-// auto-registering it with initialQty if it does not already exist
+// getOrRegisterStock gives every stock an id on first sight; stocks that only
+// appear in processes or the optimize line start at initialQty (0).
 func getOrRegisterStock(cfg *Config, name string, initialQty int) int {
 	if id, exists := cfg.StockIndex[name]; exists {
 		return id

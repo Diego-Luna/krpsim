@@ -1,15 +1,13 @@
 package sim
 
 import (
-	"errors"
 	"fmt"
+
 	"krpsim/internal/config"
 )
 
-// * is returned by `MaxRuns“ when a process has no needs
-const DefaultMaxRunsCap = 10000
-
-// * State represents the simulation state at a specific cycle
+// State is the stock situation at Cycle plus every process still running.
+// Needs are taken when a process starts, results arrive at start + delay.
 type State struct {
 	Cfg    *config.Config
 	Cycle  int
@@ -17,139 +15,64 @@ type State struct {
 	events eventHeap
 }
 
-// ! NewState initializes a simulation state from a configuration, cloning initial stocks
 func NewState(cfg *config.Config) *State {
-	if cfg == nil {
+	return &State{Cfg: cfg, Stocks: append([]int(nil), cfg.InitialStocks...)}
+}
+
+func (s *State) CanLaunch(p int) bool {
+	for _, n := range s.Cfg.Processes[p].Needs {
+		if s.Stocks[n.Stock] < n.Qty {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *State) Launch(p int) error {
+	proc := &s.Cfg.Processes[p]
+	for _, n := range proc.Needs {
+		if have := s.Stocks[n.Stock]; have < n.Qty {
+			return fmt.Errorf("insufficient stock for %s: have %d, need %d", s.Cfg.StockNames[n.Stock], have, n.Qty)
+		}
+	}
+	for _, n := range proc.Needs {
+		s.Stocks[n.Stock] -= n.Qty
+	}
+	if proc.Delay == 0 {
+		s.credit(proc)
 		return nil
 	}
-	stocks := make([]int, len(cfg.InitialStocks))
-	copy(stocks, cfg.InitialStocks)
-	return &State{
-		Cfg:    cfg,
-		Cycle:  0,
-		Stocks: stocks,
-		events: make(eventHeap, 0),
-	}
-}
-
-// ! MaxRuns returns how many times process p can run given the provided stocks slice
-// ! If stocks is nil, the state's current stocks are used
-// ! If p has no needs, it returns DefaultMaxRunsCap (10000)
-func (s *State) MaxRuns(p int, stocks []int) int {
-	if s == nil || s.Cfg == nil || p < 0 || p >= len(s.Cfg.Processes) {
-		return 0
-	}
-	if stocks == nil {
-		stocks = s.Stocks
-	}
-	proc := &s.Cfg.Processes[p]
-	if len(proc.Needs) == 0 {
-		return DefaultMaxRunsCap
-	}
-
-	maxRuns := DefaultMaxRunsCap
-	hasPositiveNeed := false
-	for i := 0; i < len(proc.Needs); i++ {
-		stockIdx, totalNeed := s.aggregatedNeed(proc, i)
-		if totalNeed <= 0 {
-			continue
-		}
-		hasPositiveNeed = true
-		if stockIdx < 0 || stockIdx >= len(stocks) {
-			return 0
-		}
-		available := stocks[stockIdx]
-		if available <= 0 {
-			return 0
-		}
-		if runs := available / totalNeed; runs < maxRuns {
-			maxRuns = runs
-		}
-	}
-	if !hasPositiveNeed {
-		return DefaultMaxRunsCap
-	}
-	return maxRuns
-}
-
-// Launch checks if Stocks has enough for proc.Needs, deducts them, and either credits
-// results immediately (if Delay == 0) or schedules a completion event in the heap
-func (s *State) Launch(p int) error {
-	if s == nil || s.Cfg == nil {
-		return errors.New("nil state or config")
-	}
-	if p < 0 || p >= len(s.Cfg.Processes) {
-		return fmt.Errorf("process index %d out of bounds [0, %d)", p, len(s.Cfg.Processes))
-	}
-	proc := &s.Cfg.Processes[p]
-	if err := s.checkNeeds(proc); err != nil {
-		return err
-	}
-	for _, need := range proc.Needs {
-		if need.Qty > 0 && need.Stock >= 0 && need.Stock < len(s.Stocks) {
-			s.Stocks[need.Stock] -= need.Qty
-		}
-	}
-	if proc.Delay <= 0 {
-		s.creditResults(proc)
-	} else {
-		s.events.push(Event{
-			End:  s.Cycle + proc.Delay,
-			Proc: p,
-		})
-	}
+	s.events.push(event{end: s.Cycle + proc.Delay, proc: p})
 	return nil
 }
 
-// * AdvanceTo pops and credits results for all events with End <= cycle, then sets Cycle = cycle.
+// AdvanceTo moves the clock to cycle and books every result due by then.
 func (s *State) AdvanceTo(cycle int) {
-	if s == nil || s.Cfg == nil {
-		return
-	}
-	for len(s.events) > 0 {
-		ev, _ := s.events.peek()
-		if ev.End > cycle {
-			break
-		}
-		s.events.pop()
-		if ev.Proc >= 0 && ev.Proc < len(s.Cfg.Processes) {
-			s.creditResults(&s.Cfg.Processes[ev.Proc])
-		}
+	for len(s.events) > 0 && s.events[0].end <= cycle {
+		s.credit(&s.Cfg.Processes[s.events.pop().proc])
 	}
 	s.Cycle = cycle
 }
 
-// * NextEvent! returns the earliest event completion cycle, or (0, false) if no events are pending
 func (s *State) NextEvent() (int, bool) {
-	if s == nil || len(s.events) == 0 {
+	if len(s.events) == 0 {
 		return 0, false
 	}
-	ev, ok := s.events.peek()
-	if !ok {
-		return 0, false
-	}
-	return ev.End, true
+	return s.events[0].end, true
 }
 
-// * Drain pops and credits all remaining events in chronological order, updating Cycle to the last event's End, and returns the final Cycle
+// Drain lets every running process finish and returns the cycle the last one ends.
 func (s *State) Drain() int {
-	if s == nil || s.Cfg == nil {
-		return 0
-	}
 	for len(s.events) > 0 {
 		ev := s.events.pop()
-		if ev.Proc >= 0 && ev.Proc < len(s.Cfg.Processes) {
-			s.creditResults(&s.Cfg.Processes[ev.Proc])
-		}
-		s.Cycle = ev.End
+		s.credit(&s.Cfg.Processes[ev.proc])
+		s.Cycle = ev.end
 	}
 	return s.Cycle
 }
 
-// * InFlightCount returns the number of active, incomplete process events currently in the heap
-func (s *State) InFlightCount() int {
-	if s == nil {
-		return 0
+func (s *State) credit(proc *config.Process) {
+	for _, r := range proc.Results {
+		s.Stocks[r.Stock] += r.Qty
 	}
-	return len(s.events)
 }

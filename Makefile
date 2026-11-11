@@ -5,12 +5,14 @@ SRCS   = cmd/krpsim/main.go \
          internal/config/config.go \
          internal/config/parse.go \
          internal/config/process.go \
-         internal/sim/heap.go \
+         internal/sim/events.go \
          internal/sim/state.go \
-         internal/sim/stocks.go \
-         internal/solver/demand.go \
+         internal/sim/inflight.go \
+         internal/solver/analysis.go \
          internal/solver/greedy.go \
+         internal/solver/guards.go \
          internal/solver/priority.go \
+         internal/solver/tuning.go \
          internal/trace/trace.go \
          internal/verify/verify.go \
          internal/report/report.go
