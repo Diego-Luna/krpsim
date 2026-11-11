@@ -9,7 +9,7 @@ import (
 const (
 	mascotOpen  = "【"
 	Mascot      = mascotOpen + "=◈︿◈=】"
-	Evaluating  = "Evaluating .................. done."
+	Evaluating  = "\n\nEvaluating .................. done."
 	Finished    = "no more process doable at time"
 	StockHeader = "Stock :"
 	StockArrow  = "=>"
